@@ -125,8 +125,13 @@ class PowerSpectralDensityEstimator(BaseContainer):
     def fit(self, epochs):
         if self.psd_method == 'welch':
             function = psd_welch
+        else:
+            function = self.psd_method
+
         self.psd_params.update(
-            tmin=self.tmin, tmax=self.tmax, fmin=self.fmin, fmax=self.fmax)
+            tmin=self.tmin, tmax=self.tmax,
+            fmin=self.fmin, fmax=self.fmax
+        )
         self.data_, self.freqs_ = function(epochs, **self.psd_params)
         self.data_norm_ = self.data_ / self.data_.sum(axis=-1)[..., None]
 

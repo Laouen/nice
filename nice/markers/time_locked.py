@@ -141,6 +141,10 @@ class TimeLockedContrast(BaseTimeLocked):
             ('channels', 1),
             ('times', 2)
         ])
+    
+    @property
+    def _valid_reductions(self):
+        return ['channels']
 
     def _reduce_to(self, reduction_func, target, picks):
         cont_list = list()

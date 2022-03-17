@@ -46,13 +46,17 @@ class Markers(OrderedDict):
 
     def fit(self, epochs):
         for meas in self.values():
+            # TODO(Lao): Change by if hasattr(meas, '_check_freq_time_range'): or just more general '_check_valid_data' 
+            # This allows to all markers to have a check instead of hardcode every marker check
             if isinstance(meas, BasePowerSpectralDensity):
                 meas._check_freq_time_range(epochs)
 
         for meas in self.values():
-            logger.info('Fitting {}'.format(meas._get_title()))
+            logger.info(f'Fitting {meas._get_title()}')
             meas.fit(epochs)
+        
         self.ch_info_ = list(self.values())[0].ch_info_
+        self.n_epochs = len(epochs)
 
     def _check_markers_fit(self):
         is_fit = True
@@ -62,18 +66,88 @@ class Markers(OrderedDict):
                 break
         return is_fit
 
+    ###########################################
+    ########## marker names getters ###########
+    ###########################################
+
+    def topo_epoch_names(self):
+        return [
+            meas._get_title() 
+            for meas in self.topo_epoch_markers()
+        ]
+
     def topo_names(self):
-        info = self.ch_info_
-        marker_names = [
-            meas._get_title() for meas in self.values() if isin_info(
-                info_source=info, info_target=meas.ch_info_) and  # noqa
-            'channels' in meas._axis_map]
-        return marker_names
+        return [
+            meas._get_title() 
+            for meas in self.topo_markers()
+        ]
+    
+    def epoch_names(self):
+        return [
+            meas._get_title()
+            for meas in self.epoch_markers()
+        ]
 
     def scalar_names(self):
         return list(self.keys())
 
-    def reduce_to_epochs(self, marker_params):
+    ###########################################
+    ###### marker by reduction getters ########
+    ###########################################
+
+    def topo_epoch_markers(self):
+        info = self.ch_info_
+        return [
+            meas for meas in self.values() 
+            if isin_info(info_source=info, info_target=meas.ch_info_) 
+            and 'channels' in meas._valid_reductions
+            and 'epochs' in meas._valid_reductions
+        ]
+    
+    def topo_markers(self):
+        info = self.ch_info_
+        return [
+            meas for meas in self.values() 
+            if isin_info(info_source=info, info_target=meas.ch_info_) 
+            and 'channels' in meas._valid_reductions
+        ]
+
+    def epoch_markers(self):
+        return [
+            meas for meas in self.values()
+            if 'epochs' in meas._valid_reductions
+        ]
+    
+    def scalar_markers(self):
+        return list(self.values())
+
+    ###########################################
+    ######           Reducers          ########
+    ###########################################
+
+    def reduce_to_topo_epoch(self, marker_params):
+        logger.info('Reducing to epochs')
+        self._check_marker_params_keys(marker_params)
+
+        markers_to_topo_epochs = self.topo_epoch_markers()
+        n_markers = len(markers_to_topo_epochs)
+
+        ch_picks = mne.pick_types(self.ch_info_, eeg=True, meg=True)
+        if ch_picks is not None:  # XXX think if info is needed down-stream
+            info = mne.io.pick.pick_info(self.ch_info_, ch_picks, copy=True)
+            n_channels = len(ch_picks)
+        else:
+            info = self.ch_info_
+            n_channels = info['nchan']
+
+        out = np.empty((n_markers, self.n_epochs, n_channels), dtype=np.float64)
+        for ii, meas in enumerate(markers_to_topo_epochs):
+            logger.info(f'Reducing {meas._get_title()}')
+            this_params = _get_reduction_params(marker_params, meas)
+            out[ii] = meas.reduce_to_topo_epoch(**this_params)
+        return out
+
+    def reduce_to_epoch(self, marker_params):
         """Reduce each marker of the collection to a single value per epoch.
 
         Parameters
@@ -104,49 +178,36 @@ class Markers(OrderedDict):
 
         Returns
         -------
-        out : dict
-            Each marker of the collection will be a key, with a value
-            representing the marker value for each epoch (
-                np.ndarray of float, shape(n_epochs,))
+        out : np.ndarray(n_marker, n_epochs)
         """
         logger.info('Reducing to epochs')
         self._check_marker_params_keys(marker_params)
-        ch_picks = mne.pick_types(self.ch_info_, eeg=True, meg=True)
-        if ch_picks is not None:  # XXX think if info is needed down-stream
-            info = mne.io.pick.pick_info(self.ch_info_, ch_picks, copy=True)
-        else:
-            info = self.ch_info_
-        markers_to_epochs = [
-            meas for meas in self.values() if isin_info(
-                info_source=info, info_target=meas.ch_info_) and  # noqa
-            'epochs' in meas._axis_map]
-        # n_markers = len(markers_to_epochs)
-        # n_epochs = markers_to_epochs[0].data_.shape[
-        #     markers_to_epochs[0]._axis_map['epochs']]
-        out = OrderedDict()
+
+        markers_to_epochs = self.epoch_markers()
+        n_markers = len(markers_to_epochs)
+        
+        out = np.empty((n_markers, self.n_epochs), dtype=np.float64)
         for ii, meas in enumerate(markers_to_epochs):
-            logger.info('Reducing {}'.format(meas._get_title()))
+            logger.info(f'Reducing {meas._get_title()}')
             this_params = _get_reduction_params(marker_params, meas)
-            out[meas._get_title()] = meas.reduce_to_epochs(**this_params)
+            out[ii] = meas.reduce_to_epoch(**this_params)
         return out
 
     def reduce_to_topo(self, marker_params):
         logger.info('Reducing to topographies')
         self._check_marker_params_keys(marker_params)
+        
+        markers_to_topo = self.topo_markers()
+        n_markers = len(markers_to_topo)
+
         ch_picks = mne.pick_types(self.ch_info_, eeg=True, meg=True)
         if ch_picks is not None:  # XXX think if info is needed down-stream
             info = mne.io.pick.pick_info(self.ch_info_, ch_picks, copy=True)
+            n_channels = len(ch_picks)
         else:
             info = self.ch_info_
-        markers_to_topo = [
-            meas for meas in self.values() if isin_info(
-                info_source=info, info_target=meas.ch_info_) and  # noqa
-            'channels' in meas._axis_map]
-        n_markers = len(markers_to_topo)
-        if ch_picks is None:
             n_channels = info['nchan']
-        else:
-            n_channels = len(ch_picks)
+
         out = np.empty((n_markers, n_channels), dtype=np.float64)
         for ii, meas in enumerate(markers_to_topo):
             logger.info('Reducing {}'.format(meas._get_title()))
@@ -158,6 +219,7 @@ class Markers(OrderedDict):
         logger.info('Reducing to scalars')
         self._check_marker_params_keys(marker_params)
         n_markers = len(self)
+        
         out = np.empty(n_markers, dtype=np.float64)
         for ii, meas in enumerate(self.values()):
             logger.info('Reducing {}'.format(meas._get_title()))
@@ -186,6 +248,8 @@ class Markers(OrderedDict):
             this_params['target'] = targets
             out[meas._get_title()] = meas._reduce_to(**this_params)
         return out
+
+    ###########################################
 
     def compress(self, reduction_func):
         for meas in self.values():
@@ -232,14 +296,6 @@ class Markers(OrderedDict):
                                  '{} is not a valid feature or class'
                                  .format(key))
 
-
-# def _reduce_to(inst, target, params):
-#     out = None
-#     if target == 'topography':
-#         out = inst.reduce_to_topo(**params)
-#     elif target == 'scalar':
-#         out = inst.reduce_to_scalar(**params)
-#     return out
 
 _markers_classes = dict(inspect.getmembers(sys.modules['nice.markers']))
 

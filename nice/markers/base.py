@@ -25,6 +25,7 @@ from packaging import version
 from ..utils import write_hdf5_mne_epochs, info_to_dict
 import numpy as np
 
+import mne
 from mne.utils import logger
 from mne.io.meas_info import Info
 from h5io import write_hdf5, read_hdf5
@@ -72,7 +73,8 @@ class BaseContainer(object):
     def _read(cls, fname, comment='default'):
         return _read_container(cls, fname, comment=comment)
 
-
+ 
+#TODO(Lao): make _get_title a public method as it's used outside the class
 class BaseMarker(BaseContainer):
     """Base class for M/EEG markers"""
 
@@ -83,7 +85,11 @@ class BaseMarker(BaseContainer):
 
     @property
     def _axis_map(self):
-        raise NotImplementedError('This should be in every marker')
+        raise NotImplementedError('_axis_map should be defined in every marker')
+
+    @property
+    def _valid_reductions(self):
+        return list(self._axis_map.keys())
 
     def fit(self, epochs):
         self._fit(epochs)
@@ -122,7 +128,12 @@ class BaseMarker(BaseContainer):
             out = func(out, axis=0)
         return out
 
-    def reduce_to_epochs(self, reduction_func, picks=None):
+    def reduce_to_topo_epoch(self, reduction_func, picks=None):
+        return self._reduce_to(
+            reduction_func, target=['epochs','topography'], picks=picks
+        )
+
+    def reduce_to_epoch(self, reduction_func, picks=None):
         """Reduce  marker to a single value per epoch.
 
         Parameters
@@ -150,7 +161,8 @@ class BaseMarker(BaseContainer):
             The value of the marker for each epoch.
         """
         return self._reduce_to(
-            reduction_func, target='epochs', picks=picks)
+            reduction_func, target='epochs', picks=picks
+        )
 
     def reduce_to_topo(self, reduction_func, picks=None):
         return self._reduce_to(
@@ -174,6 +186,9 @@ class BaseMarker(BaseContainer):
             self.data_ = np.expand_dims(data, axis=axis)
 
     def _prepare_data(self, picks, target):
+        """Filter the self.data_ to only keep for the picked elements of 
+        each dimension.
+        """
         data = self.data_
         to_preserve = self._get_preserve_axis(target)
         if picks is not None:
@@ -220,8 +235,7 @@ class BaseMarker(BaseContainer):
                              'why we will not tolerate these things')
         if len(axis_to_preserve) > 0:
             permutation_list += removed_axis
-        logger.info('Reduction order for {}: {}'.format(
-            self._get_title(), permutation_axes))
+        logger.info(f'Reduction order for {self._get_title()}: {permutation_axes}')
         data = np.transpose(data, permutation_list)
         if return_axis is False:
             out = data, funcs
