@@ -115,8 +115,7 @@ class BaseMarker(BaseContainer):
             elif 'epochs' == elem:
                 to_preserve.append('epochs')
         if any(x not in self._axis_map.keys() for x in to_preserve):
-            raise ValueError('Cannot reduce {} to {}'.format(
-                self._get_title(), targets))
+            raise ValueError(f'Cannot reduce {self._get_title()} to {targets}')
         return to_preserve
 
     def _reduce_to(self, reduction_func, target, picks):
@@ -178,8 +177,7 @@ class BaseMarker(BaseContainer):
         if 'epochs' in self._axis_map:
             axis = self._axis_map['epochs']
             logger.info(
-                'Compressing {} on axis {} (epochs)'.format(
-                    self._get_title(), axis)
+                f'Compressing {self._get_title()} on axis {axis} (epochs)'
             )
             data = reduction_func(self.data_, axis=axis)
             # Keep dimension
@@ -237,6 +235,7 @@ class BaseMarker(BaseContainer):
             permutation_list += removed_axis
         logger.info(f'Reduction order for {self._get_title()}: {permutation_axes}')
         data = np.transpose(data, permutation_list)
+
         if return_axis is False:
             out = data, funcs
         else:
