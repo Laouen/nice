@@ -126,7 +126,7 @@ class Markers(OrderedDict):
     ###########################################
 
     def reduce_to_topo_epoch(self, marker_params):
-        logger.info('Reducing to epochs')
+        logger.info('Reducing to topo epochs')
         self._check_marker_params_keys(marker_params)
 
         markers_to_topo_epochs = self.topo_epoch_markers()
