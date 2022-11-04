@@ -34,6 +34,7 @@ from h5io import write_hdf5
 from .base import (BaseMarker, BaseContainer, _get_title, _read_container)
 from ..algorithms.spectral import psd_welch
 
+from mne import time_frequency as mne_tfr
 
 class BasePowerSpectralDensity(BaseMarker):
     def __init__(self, tmin, tmax, fmin, fmax, estimator=None,
@@ -125,8 +126,10 @@ class PowerSpectralDensityEstimator(BaseContainer):
     def fit(self, epochs):
         if self.psd_method == 'welch':
             function = psd_welch
+        elif hasattr(mne_tfr, self.psd_method):
+            function = getattr(mne_tfr, self.psd_method)
         else:
-            function = self.psd_method
+            raise ValueError('Unknown psd_method: %s' % self.psd_method)
 
         self.psd_params.update(
             tmin=self.tmin, tmax=self.tmax,

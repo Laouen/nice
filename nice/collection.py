@@ -259,9 +259,9 @@ class Markers(OrderedDict):
     def save(self, fname, overwrite=False):
         if isinstance(fname, Path):
             fname = fname.as_posix()
-        if not fname.endswith('-markers.hdf5'):
+        if not fname.endswith('_markers.hdf5'):
             logger.warning('Feature collections file name should end '
-                           'with "-markers.hdf5". Some NICE markers '
+                           'with "_markers.hdf5". Some NICE markers '
                            'might not work.')
         write_hdf5(fname, list(self.keys()), title='nice/markers/order',
                    overwrite=overwrite, slash='replace')
